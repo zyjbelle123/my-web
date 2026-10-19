@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>根据特征猜数字</title>
+  <style>
+    :root {
+      --canvas: #EEF4F8;
+      --surface: #F7FAFC;
+      --white: #FFFFFF;
+      --ink: #102A46;
+      --primary: #13B8A6;
+      --primary-deep: #0B7F83;
+      --highlight: #D9E8F4;
+      --attention: #B54A4A;
+      --positive: #173A63;
+      --muted: #5F7390;
+      --border: #CBD9E7;
+      --shadow: 0 14px 28px rgba(16, 42, 70, .10);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { background: var(--canvas); color: var(--ink); font-family: "Trebuchet MS", "Microsoft YaHei", system-ui, sans-serif; overflow-x: hidden; }
+    button { font: inherit; }
+    .app { min-height: 100dvh; padding: 28px 34px 34px; }
+    .topbar { max-width: 1440px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark { width: 54px; height: 54px; border-radius: 18px; background: var(--primary); border: 3px solid var(--primary-deep); display: grid; place-items: center; box-shadow: 4px 5px 0 rgba(212, 128, 25, .24); }
+    .brand-mark svg { width: 34px; height: 34px; }
+    .eyebrow { color: var(--positive); font-weight: 800; letter-spacing: .08em; font-size: 14px; margin-bottom: 3px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 54px); line-height: 1.05; letter-spacing: .04em; color: var(--primary); font-weight: 900; }
+    .subtitle { margin: 7px 0 0; font-size: clamp(15px, 1.7vw, 22px); color: var(--muted); }
+    .progress-wrap { min-width: 220px; text-align: right; }
+    .progress-label { font-size: 14px; font-weight: 800; color: var(--muted); margin-bottom: 8px; }
+    .progress { display: flex; gap: 8px; justify-content: flex-end; }
+    .progress-dot { width: 36px; height: 12px; border-radius: 99px; background: #DDE8F2; border: 1px solid var(--border); transition: .25s; }
+    .progress-dot.active { background: var(--primary); border-color: var(--primary-deep); }
+    .progress-dot.done { background: var(--positive); border-color: var(--positive); }
+    .main-grid { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: minmax(300px, .78fr) minmax(0, 1.55fr); gap: 24px; align-items: stretch; }
+    .main-grid > * { min-width: 0; }
+    .panel { background: var(--surface); border: 2px solid var(--border); box-shadow: var(--shadow); }
+    .clue-panel { border-radius: 26px; padding: 24px; min-height: 610px; }
+    .panel-head { display: flex; align-items: center; gap: 12px; border-bottom: 2px dashed var(--border); padding-bottom: 16px; }
+    .panel-head h2 { margin: 0; font-size: 28px; color: var(--primary); }
+    .magnify { width: 38px; height: 38px; border: 3px solid var(--positive); border-radius: 50%; position: relative; background: var(--highlight); }
+    .magnify:after { content: ""; width: 18px; height: 8px; border-radius: 8px; background: var(--positive); position: absolute; right: -14px; bottom: -7px; transform: rotate(45deg); }
+    .clue-list { display: grid; gap: 12px; }
+    .clue-card { display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center; padding: 14px; border: 2px solid transparent; border-radius: 18px; background: rgba(255, 255, 255, .64); transition: .25s; }
+    .clue-card.revealed { border-color: var(--highlight); background: var(--white); }
+    .clue-card.hidden { opacity: .48; filter: saturate(.6); }
+    .clue-icon { width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center; background: #E7EEF5; color: var(--primary-deep); font-weight: 900; font-size: 26px; }
+    .clue-card.revealed .clue-icon { background: var(--highlight); color: var(--positive); }
+    .clue-kicker { font-size: 14px; color: var(--muted); font-weight: 800; }
+    .clue-text { font-size: 20px; line-height: 1.35; font-weight: 900; margin-top: 3px; }
+    .clue-card.hidden .clue-text { color: #9AAFC4; }
+    .clue-action { margin-top: 18px; width: 100%; min-height: 52px; border: 2px solid var(--primary-deep); background: var(--primary); color: #000; font-weight: 900; border-radius: 14px; cursor: pointer; transition: .2s; }
+    .clue-action:hover, .clue-action:focus-visible { transform: translateY(-2px); box-shadow: 0 5px 0 rgba(212, 128, 25, .22); outline: none; }
+    .clue-action:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .game-panel { min-height: 610px; border-radius: 26px; padding: 24px 26px 26px; background: var(--white); display: flex; flex-direction: column; }
+    .round-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .round-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--highlight); color: var(--positive); font-weight: 900; }
+    .status-text { color: var(--muted); font-weight: 800; text-align: right; }
+    .observation { flex: 1; display: block; padding: 26px 0 6px; }
+    .candidate-area { text-align: center; }
+    .feedback { text-align: left; }
+    .candidate-area h3 { margin: 0 0 7px; font-size: 25px; }
+    .candidate-area p { margin: 0 0 18px; color: var(--muted); line-height: 1.5; }
+    .candidates { display: grid; grid-template-columns: repeat(5, minmax(64px, 1fr)); max-width: 860px; margin: 0 auto; gap: 16px; }
+    .candidate { min-height: 92px; border-radius: 20px; border: 2px solid var(--border); background: var(--surface); color: var(--ink); font-size: 46px; font-weight: 900; cursor: pointer; transition: .2s; }
+    .candidate:hover, .candidate:focus-visible { transform: translateY(-3px); border-color: var(--primary); outline: none; box-shadow: 0 5px 0 rgba(248, 152, 31, .18); }
+    .candidate.correct { background: var(--positive); color: var(--white); border-color: var(--positive); }
+    .candidate.wrong { background: #FBE7E7; color: var(--attention); border-color: var(--attention); animation: shake .3s ease-in-out; }
+    @keyframes shake { 25% { transform: translateX(-5px) } 50% { transform: translateX(5px) } 75% { transform: translateX(-3px) } }
+    .feedback { min-height: 88px; margin-top: 20px; padding: 16px 18px; border-radius: 18px; background: var(--surface); border: 2px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 15px; }
+    .feedback strong { display: block; font-size: 20px; margin-bottom: 4px; }
+    .feedback p { margin: 0; color: var(--muted); line-height: 1.45; }
+    .feedback.ok { border-color: var(--positive); background: rgba(166, 207, 239, .28); }
+    .feedback.no { border-color: var(--attention); background: #FFF2F2; }
+    .feedback-msg { flex: 1; }
+    .fb-action { min-width: 116px; min-height: 48px; padding: 0 16px; border: 2px solid var(--primary-deep); background: var(--primary); color: #000; border-radius: 12px; cursor: pointer; font-weight: 900; }
+    .fb-action[hidden] { display: none; }
+    .feedback.empty { display: none; }
+    .footer-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding-top: 16px; border-top: 2px dashed var(--border); color: var(--muted); font-size: 14px; font-weight: 800; }
+    .restart { border: 0; background: transparent; color: var(--positive); text-decoration: underline; cursor: pointer; font-weight: 900; padding: 8px; }
+    .summary { display: none; max-width: 1440px; margin: 24px auto 0; padding: 28px; border-radius: 26px; border: 2px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+    .summary.show { display: block; }
+    .summary h2 { margin: 0 0 10px; color: var(--primary); font-size: 32px; }
+    .summary p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 18px; }
+    .feature-pills { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 22px; }
+    .pill { background: var(--white); border: 1px solid var(--border); padding: 10px 14px; border-radius: 999px; font-weight: 900; color: var(--positive); }
+    .summary-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .summary-actions button { min-height: 48px; padding: 0 18px; border-radius: 12px; cursor: pointer; font-weight: 900; border: 2px solid var(--primary-deep); background: var(--primary); }
+    .summary-actions .secondary { background: var(--white); color: var(--ink); border-color: var(--border); }
+    #takeaway { display: none; margin-top: 16px; color: var(--positive); font-weight: 900; }
+    #takeaway.show { display: block; }
+    .transition { display: none; max-width: 1120px; margin: 26px auto 0; }
+    .transition.show { display: block; }
+    .transition-card { position: relative; overflow: hidden; padding: 40px 44px 36px; border-radius: 32px; border: 3px solid var(--primary); background: linear-gradient(150deg, #FFFFFF, #F7FAFC 58%, rgba(217, 232, 244, .72)); box-shadow: 0 22px 46px rgba(16, 42, 70, .16); animation: casePop .55s cubic-bezier(.2, .9, .24, 1.12) both; }
+    .transition-card:before, .transition-card:after { content: ""; position: absolute; border-radius: 50%; border: 3px dashed rgba(19, 184, 166, .34); pointer-events: none; }
+    .transition-card:before { width: 260px; height: 260px; right: -92px; top: -92px; }
+    .transition-card:after { width: 184px; height: 184px; left: -74px; bottom: -74px; border-color: rgba(23, 58, 99, .22); }
+    .transition-flag { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 999px; background: var(--positive); color: #FFFFFF; font-weight: 900; letter-spacing: .06em; }
+    .transition-flag svg { width: 20px; height: 20px; }
+    .transition-card h2 { margin: 16px 0 0; font-size: clamp(30px, 4.4vw, 52px); line-height: 1.12; color: var(--primary); letter-spacing: .03em; }
+    .transition-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 34px; align-items: center; margin-top: 20px; }
+    .transition-answer { position: relative; z-index: 1; min-height: 232px; border-radius: 26px; border: 3px solid var(--highlight); background: #FFFFFF; display: grid; place-items: center; animation: answerIn .5s .12s ease-out both; }
+    .transition-answer small { position: absolute; top: 14px; left: 0; right: 0; text-align: center; color: var(--muted); font-weight: 900; font-size: 14px; letter-spacing: .1em; }
+    .transition-answer b { font-size: 128px; line-height: 1; font-weight: 900; color: var(--primary); text-shadow: 5px 7px 0 rgba(59, 100, 132, .18); }
+    .transition-reason { margin: 0; color: var(--ink); font-size: clamp(17px, 1.8vw, 22px); line-height: 1.62; font-weight: 700; }
+    .transition-clues { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+    .transition-clues li { padding: 9px 14px; border-radius: 12px; background: rgba(166, 207, 239, .28); border: 1px solid var(--highlight); color: var(--positive); font-weight: 800; }
+    .transition-next { margin-top: 24px; padding-top: 20px; border-top: 2px dashed var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; position: relative; z-index: 1; }
+    .transition-next span { color: var(--muted); font-weight: 800; font-size: 17px; }
+    .transition-btn { min-width: 220px; min-height: 62px; padding: 0 26px; border-radius: 16px; border: 3px solid var(--primary-deep); background: var(--primary); color: #000000; font-size: 22px; font-weight: 900; cursor: pointer; transition: .18s; animation: btnPulse 1.9s ease-in-out infinite; }
+    .transition-btn:hover, .transition-btn:focus-visible { transform: translateY(-3px); outline: none; }
+    .transition-card.fast .transition-body { grid-template-columns: 250px minmax(0, 1fr); align-items: center; }
+    .transition-card.fast .transition-answer { width: auto; }
+    .transition-clue-heading { margin: 0 0 10px; color: var(--positive); font-weight: 900; font-size: 18px; }
+    @keyframes casePop { from { opacity: 0; transform: translateY(26px) scale(.96); } to { opacity: 1; transform: none; } }
+    @keyframes answerIn { from { opacity: 0; transform: scale(.72); } to { opacity: 1; transform: scale(1); } }
+    @keyframes btnPulse { 0%, 100% { box-shadow: 0 6px 0 rgba(11, 127, 131, .35); } 50% { box-shadow: 0 6px 0 rgba(11, 127, 131, .35), 0 0 0 9px rgba(19, 184, 166, .18); } }
+    @media (prefers-reduced-motion: reduce) { .transition-card, .transition-answer, .transition-btn { animation: none; } }
+    @media (max-width: 980px) {
+      .app { padding: 20px 16px 28px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .progress-wrap { width: 100%; text-align: left; }
+      .progress { justify-content: flex-start; }
+      .main-grid { grid-template-columns: 1fr; }
+      .clue-panel, .game-panel { min-height: unset; }
+      .observation { padding: 14px 0 6px; }
+      .transition-card { padding: 28px 22px 26px; }
+      .transition-body { grid-template-columns: 1fr; gap: 18px; }
+      .transition-answer { min-height: 190px; }
+      .transition-answer b { font-size: 96px; }
+      .status-text { text-align: left; }
+    }
+    @media (max-width: 520px) {
+      h1 { font-size: 32px; }
+      .subtitle { font-size: 16px; }
+      .clue-panel, .game-panel { padding: 18px; border-radius: 20px; }
+      .clue-card { grid-template-columns: 52px 1fr; padding: 11px; }
+      .clue-icon { width: 48px; height: 48px; font-size: 21px; }
+      .clue-text { font-size: 17px; }
+      .candidates { gap: 8px; max-width: none; }
+      .candidate { min-height: 62px; font-size: 30px; }
+      .transition-answer b { font-size: 74px; }
+      .transition-next { flex-direction: column; align-items: stretch; }
+      .transition-flow { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+      .transition-btn { width: 100%; min-width: 0; }
+      .transition-card.fast .transition-body { grid-template-columns: 1fr; }
+      .transition-card.fast .transition-answer { width: 100%; }
+      .feedback { align-items: flex-start; flex-direction: column; }
+      .fb-action { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+           <svg viewBox="0 0 40 40"><circle cx="17" cy="17" r="10" fill="#F7FAFC" stroke="#173A63" stroke-width="3" /><path d="M24 24 L34 34" stroke="#173A63" stroke-width="5" stroke-linecap="round" /></svg>
+        </div>
+        <div>
+      <h1>根据特征猜数字</h1>
+          <p class="subtitle">观察形状特征，猜猜它是哪一个数字？</p>
+        </div>
+      </div>
+      <div class="progress-wrap" aria-label="侦探进度">
+        <div class="progress-label" id="progressLabel">关卡进度：第 1 / 3 关</div>
+        <div class="progress" id="progressDots"><span class="progress-dot active"></span><span class="progress-dot"></span><span class="progress-dot"></span></div>
+      </div>
+    </header>
+
+    <section class="main-grid" id="gameView">
+      <aside class="panel clue-panel" aria-labelledby="clueTitle">
+        <div class="panel-head"><span class="magnify" aria-hidden="true"></span><h2 id="clueTitle">数字线索</h2></div>
+        <div class="clue-list" id="clueList"></div>
+        <button class="clue-action" id="revealBtn" type="button">揭示下一条线索</button>
+      </aside>
+
+      <section class="panel game-panel" aria-live="polite">
+        <div class="round-row">
+          <div class="round-badge" id="roundBadge"></div>
+          <div class="status-text" id="statusText"></div>
+        </div>
+        <div class="observation">
+          <div class="candidate-area">
+            <h3>你认为它是哪个数字？</h3>
+            <p>点击一个答案。答错也没关系：可以继续找线索再猜；三条线索都看完后，还能看答案继续下一关。</p>
+            <div class="candidates" id="candidates"></div>
+            <div class="feedback" id="feedback" aria-live="assertive">
+              <div class="feedback-msg" id="feedbackMsg"></div>
+              <button class="fb-action" id="feedbackAction" type="button" hidden></button>
+            </div>
+          </div>
+        </div>
+        <div class="footer-row"><span>识别数字的关键：竖线、横线、圆圈和封闭区域。</span><button class="restart" id="restartBtn" type="button">重新开始</button></div>
+      </section>
+    </section>
+
+    <section class="transition" id="transition" aria-live="assertive"></section>
+
+    <section class="summary" id="summary" aria-labelledby="summaryTitle">
+      <h2 id="summaryTitle">侦探结案：数字也有自己的“特征指纹”</h2>
+      <p>我们不是靠猜，而是先观察，再用特征排除不可能的答案。可以关注有没有竖线、横线、圆圈，以及有没有封闭区域或完全没有封闭区域。</p>
+      <div class="feature-pills"><span class="pill">有竖线</span><span class="pill">有横线</span><span class="pill">有圆圈</span><span class="pill">有封闭区域</span><span class="pill">无封闭区域</span></div>
+      <div class="summary-actions"><button id="summaryRestart" type="button">再玩一次</button><button class="secondary" id="showTakeaway" type="button">查看课堂结论</button></div>
+      <p id="takeaway">课堂结论：观察对象的关键特征，就能更准确地识别它。</p>
+    </section>
+  </main>
+
+  <script>
+    const cases = [
+      {
+        title: '关卡 1：寻找“竖线”',
+        answer: '1',
+        choices: ['1', '4', '7', '8', '9'],
+        clues: [
+          ['线索 1', '有竖线。'],
+          ['线索 2', '无封闭区域。'],
+          ['线索 3', '没有圆圈。']
+        ],
+        reveal: '有竖线、无封闭区域：4 和 9 都围出了封闭区域，7 和 8 没有竖线，所以它是数字 1。'
+      },
+      {
+        title: '关卡 2：两条线索一起看',
+        answer: '4',
+        choices: ['0', '1', '4', '7', '9'],
+        clues: [
+          ['线索 1', '有横线。'],
+          ['线索 2', '有封闭区域。'],
+          ['线索 3', '没有圆圈。']
+        ],
+        reveal: '只凭线索 1“有横线”，还剩 4 和 7；只凭线索 2“有封闭区域”，还剩 4、0 和 9。两条合起来，既要有横线又要有封闭区域，只能是数字 4。'
+      },
+      {
+        title: '关卡 3：寻找“圆圈和封闭区域”',
+        answer: '8',
+        choices: ['3', '5', '6', '8', '9'],
+        clues: [
+          ['线索 1', '有圆圈。'],
+          ['线索 2', '有封闭区域。'],
+          ['线索 3', '有两个封闭区域，上下各一个。']
+        ],
+        reveal: '有圆圈、有封闭区域，而且是上下两个封闭区域：3 和 5 没有封闭区域，6 和 9 只有一个，所以它是数字 8。'
+      }
+    ];
+
+    const state = { index: 0, revealed: 1, solved: false, attempts: 0, mode: 'explain' };
+    let autoTimer = null;
+    function clearAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } }
+    const els = {
+      clueList: document.getElementById('clueList'),
+      revealBtn: document.getElementById('revealBtn'),
+      candidates: document.getElementById('candidates'),
+      feedback: document.getElementById('feedback'),
+      feedbackMsg: document.getElementById('feedbackMsg'),
+      feedbackAction: document.getElementById('feedbackAction'),
+      transition: document.getElementById('transition'),
+      summary: document.getElementById('summary'),
+      gameView: document.getElementById('gameView'),
+      progressLabel: document.getElementById('progressLabel'),
+      roundBadge: document.getElementById('roundBadge'),
+      statusText: document.getElementById('statusText')
+    };
+    const progressDots = [...document.querySelectorAll('.progress-dot')];
+
+    function setFeedback(kind, title, text, action, actionLabel) {
+      els.feedback.className = 'feedback' + (kind ? ' ' + kind : '');
+      els.feedbackMsg.innerHTML = '<strong>' + title + '</strong><p>' + text + '</p>';
+      if (action) {
+        els.feedbackAction.hidden = false;
+        els.feedbackAction.dataset.action = action;
+        els.feedbackAction.textContent = actionLabel;
+      } else {
+        els.feedbackAction.hidden = true;
+        els.feedbackAction.removeAttribute('data-action');
+      }
+      window.__interactionState = { case: state.index + 1, revealed: state.revealed, solved: state.solved, attempts: state.attempts, feedback: kind, action: action || 'none' };
+    }
+
+    function clearFeedback() {
+      els.feedback.className = 'feedback empty';
+      els.feedbackMsg.innerHTML = '';
+      els.feedbackAction.hidden = true;
+      els.feedbackAction.removeAttribute('data-action');
+      els.feedbackAction.textContent = '';
+      window.__interactionState = { level: state.index + 1, revealed: state.revealed, solved: state.solved, attempts: state.attempts, feedback: 'empty', action: 'none' };
+    }
+
+    function hasMoreClues() { return state.revealed < cases[state.index].clues.length; }
+
+    function renderClues() {
+      const item = cases[state.index];
+      els.clueList.innerHTML = item.clues.map((clue, i) => {
+        const open = i < state.revealed;
+        return '<div class="clue-card ' + (open ? 'revealed' : 'hidden') + '" data-index="' + i + '">'
+          + '<div class="clue-icon">' + (open ? '✓' : '?') + '</div>'
+          + '<div><div class="clue-kicker">' + clue[0] + '</div><div class="clue-text">' + (open ? clue[1] : '线索还藏在档案里……') + '</div></div></div>';
+      }).join('');
+      els.revealBtn.disabled = !hasMoreClues();
+      els.revealBtn.textContent = hasMoreClues() ? '揭示下一条线索' : '线索已全部揭示';
+      els.statusText.textContent = '已发现 ' + state.revealed + ' 条线索';
+    }
+
+    function render() {
+      const item = cases[state.index];
+      state.solved = false;
+      state.attempts = 0;
+      els.roundBadge.textContent = item.title;
+      els.progressLabel.textContent = '关卡进度：第 ' + (state.index + 1) + ' / ' + cases.length + ' 关';
+      progressDots.forEach((dot, i) => { dot.className = 'progress-dot ' + (i < state.index ? 'done' : i === state.index ? 'active' : ''); });
+      els.transition.classList.remove('show');
+      els.transition.innerHTML = '';
+      renderClues();
+      els.candidates.innerHTML = item.choices.map(c => '<button class="candidate" type="button" data-choice="' + c + '" aria-label="选择数字 ' + c + '">' + c + '</button>').join('');
+      clearFeedback();
+    }
+
+    function revealNext() {
+      const item = cases[state.index];
+      if (!hasMoreClues()) return;
+      state.revealed += 1;
+      renderClues();
+      const latest = item.clues[state.revealed - 1][1];
+      if (hasMoreClues()) {
+        setFeedback('', '新线索已记录', latest + ' 继续观察，也可以现在就猜。', 'reveal', '再看一条线索');
+      } else {
+        setFeedback('', '三条线索都用上了', latest + ' 现在可以猜一猜；如果还不确定，也可以直接看答案，继续下一关。', 'answer', '看答案，继续下一关');
+      }
+    }
+
+    function choose(choice, btn) {
+      const item = cases[state.index];
+      if (state.solved) return;
+      state.attempts += 1;
+      els.candidates.querySelectorAll('.candidate').forEach(b => b.classList.remove('wrong', 'correct'));
+      if (choice === item.answer) {
+        state.solved = true;
+        state.mode = 'fast';
+        state.revealed = item.clues.length;
+        renderClues();
+        btn.classList.add('correct');
+        closeCase();
+      } else {
+        btn.classList.add('wrong');
+        if (hasMoreClues()) {
+          setFeedback('no', '这个答案还不够符合线索', '数字 ' + choice + ' 和已发现的特征对不上，再找一条线索看看。', 'reveal', '再看一条线索');
+        } else {
+          setFeedback('no', '这个答案还不够符合线索', '数字 ' + choice + ' 不符合这些特征。也可以继续点其他数字再猜一次。', 'answer', '看答案，继续下一关');
+        }
+      }
+    }
+
+    function revealAnswer() {
+      state.solved = true;
+      state.mode = 'explain';
+      state.revealed = cases[state.index].clues.length;
+      renderClues();
+      closeCase();
+    }
+
+    function closeCase() {
+      clearAuto();
+      const item = cases[state.index];
+      const isLast = state.index === cases.length - 1;
+      const next = cases[state.index + 1];
+      const fast = state.mode === 'fast';
+      const nextLabel = isLast ? '查看课堂总结' : '进入关卡 ' + (state.index + 2);
+      const clueChips = item.clues.map(c => '<li>' + c[0] + '：' + c[1] + '</li>').join('');
+      const explainBlock = fast
+        ? '<div><p class="transition-clue-heading">本关全部线索</p><ul class="transition-clues">' + clueChips + '</ul></div>'
+        : '<div><p class="transition-reason">' + item.reveal + '</p><ul class="transition-clues">' + clueChips + '</ul></div>';
+      const countBlock = '';
+      els.transition.innerHTML = '<div class="transition-card' + (fast ? ' fast' : '') + '">'
+        + '<div class="transition-flag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13 L9.5 19 L20 5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" /></svg><span>关卡 ' + (state.index + 1) + ' 已通关</span></div>'
+        + '<h2>' + (fast ? '答对了：数字 ' + item.answer : '答案揭晓：数字 ' + item.answer) + '</h2>'
+        + '<div class="transition-body"><div class="transition-answer"><small>' + (fast ? '识别正确' : '本次识别的数字') + '</small><b>' + item.answer + '</b></div>' + explainBlock + '</div>'
+         + '<div class="transition-next"><span>' + (isLast ? '三个关卡全部完成，去看看侦探总结。' : '下一站：' + next.title) + '</span>'
+         + '<div class="transition-flow"><button class="transition-btn" id="enterNextBtn" type="button">' + nextLabel + '</button></div></div></div>';
+      els.gameView.style.display = 'none';
+      els.transition.classList.add('show');
+      progressDots.forEach((dot, i) => { dot.className = 'progress-dot ' + (i <= state.index ? 'done' : ''); });
+      els.progressLabel.textContent = '关卡进度：第 ' + (state.index + 1) + ' / ' + cases.length + ' 关已通关';
+      document.getElementById('enterNextBtn').addEventListener('click', () => { clearAuto(); enterNext(); });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.__interactionState = { case: state.index + 1, phase: fast ? 'transition-fast-manual' : 'transition-explain', answer: item.answer, revealed: state.revealed };
+    }
+
+    function enterNext() {
+      clearAuto();
+      if (state.index >= cases.length - 1) {
+        els.transition.classList.remove('show');
+        els.transition.innerHTML = '';
+        els.summary.classList.add('show');
+        els.progressLabel.textContent = '侦探进度：全部结案';
+        progressDots.forEach(dot => dot.className = 'progress-dot done');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      state.index += 1;
+      state.revealed = 1;
+      els.gameView.style.display = 'grid';
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function restart() {
+      clearAuto();
+      state.index = 0;
+      state.revealed = 1;
+      state.solved = false;
+      state.attempts = 0;
+      state.mode = 'explain';
+      els.summary.classList.remove('show');
+      els.transition.classList.remove('show');
+      els.transition.innerHTML = '';
+      els.gameView.style.display = 'grid';
+      document.getElementById('takeaway').classList.remove('show');
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    els.candidates.addEventListener('click', e => {
+      const btn = e.target.closest('.candidate');
+      if (btn) choose(btn.dataset.choice, btn);
+    });
+    els.feedbackAction.addEventListener('click', e => {
+      const action = e.currentTarget.dataset.action;
+      if (action === 'reveal') revealNext();
+      else if (action === 'answer') revealAnswer();
+    });
+    els.revealBtn.addEventListener('click', revealNext);
+    document.getElementById('restartBtn').addEventListener('click', restart);
+    document.getElementById('summaryRestart').addEventListener('click', restart);
+    document.getElementById('showTakeaway').addEventListener('click', () => document.getElementById('takeaway').classList.add('show'));
+
+    render();
+  </script>
+</body>
+</html>
